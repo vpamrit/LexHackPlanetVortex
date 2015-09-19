@@ -1,0 +1,5 @@
+ def touchvector(self, speed, earth_radius):
+        #if(self.r+earth_radius>=mag(self.x, self.y)):
+        self.dx = -1*self.y/mag(self.x, self.y)*earth.speed#*earth.accel
+        self.dy = self.x/mag(self.x, self.y)*earth.speed#*earth.accel
+        print self.dx , " ", self.dy
