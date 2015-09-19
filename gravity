@@ -1,0 +1,8 @@
+def grav(self, earth_radius):
+        magnit = mag(self.x, self.y)
+        self.gspeed+=self.gaccel
+        print self.gspeed
+        if(self.r+earth_radius>mag(self.x, self.y)):
+           self.gspeed=0.05
+        self.x+= -1*self.x/magnit*self.gspeed
+        self.y+= -1*self.y/magnit*self.gspeed
