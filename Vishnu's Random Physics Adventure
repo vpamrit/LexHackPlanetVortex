@@ -66,8 +66,6 @@ class Ball(pygame.sprite.Sprite):
         self.x = x
         self.y = y
         self.r = r
-        self.forcedx = 0
-        self.forcedy = 0
         self.angle = angle
         self.speed =0
         self.gspeed=0
@@ -80,36 +78,28 @@ class Ball(pygame.sprite.Sprite):
         if( cur_r< earth_radius+self.r):
             self.x = self.x/cur_r *(self.r+earth_radius)
             self.y = self.y/cur_r *(self.r+earth_radius)
-    def touchvector(self, earth_radius):
-        self.speed=mag(self.dx, self.dy)
-        self.normx = -1*self.y/mag(self.x, self.y)*self.speed
         self.normy = self.x/mag(self.x, self.y)*self.speed
-    def applyearthspeed(self):
-        self.dx *= earth.speed
-        self.dy *= earth.speed
     def grav(self, earth_radius):
         magnit = mag(self.x, self.y)
-        self.gaccel=0.05
-        
+        self.gaccel=0.005
         if(self.r+earth_radius+0.01>=mag(self.x, self.y)):
            self.gaccel=0.0
         self.gravx= -1*self.x/magnit*self.gaccel
         self.gravy= -1*self.y/magnit*self.gaccel
     def move(self, earthobj, lines):
-        #self.touchvector(earthobj.r)
         self.grav(earthobj.r)       #modify for gravitational strength
        # self.between(lines)
         self.dx+=self.gravx + self.normx   #break into two components, normal speed and gravity speed
         self.dy+=self.gravy + self.normy
         #print self.normx, " ", self.normy
         #print "X Speed: ", self.dx,  " Y Speed: ", self.dy
+        if(mag(self.dx, self.dy)>2): #CAPPING STATEMENT ON SPEED OF THE BALL
+            self.dx=self.dx/mag(self.dx, self.dy)*2
+            self.dy=self.dy/mag(self.dx, self.dy)*2
         self.dx=self.dx/1.001 #friction
         self.dy=self.dy/1.001
         self.x+=self.dx #add velocity to dx and dy
         self.y+=self.dy
-        #if(mag(self.dx, self.dy)>10): #CAPPING STATEMENT ON SPEED OF THE BALL
-            #self.dx=self.dx/mag(self.dx, self.dy)*10
-            #self.dy=self.dy/mag(self.dx, self.dy)*10
     def pointToLine(self,line):#[[400,500],[580,420]] WORKING
         mline = findSlope(line)#slope of the barrier line
         if(self.dx ==0):
@@ -128,21 +118,26 @@ class Ball(pygame.sprite.Sprite):
             y = mline*x+(line[1][1] - mline*line[1][0])
             distance = dist([self.x,self.y],[x,y])
         return distance    
-    def between(self, lines):
+    def between(self, lines):                                                           #returns the line that the ball is touching
         for n in range(len(lines)):
             #[ [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] ]
             center = [  (lines[n][0][0] +lines[n][1][0])/2 , (lines[n][0][1] + lines[n][1][1])/2  ]
             if( dist(center, [self.x,self.y]) < 2*self.r ):
                 if(self.r>=self.pointToLine(lines[n])):#THIS WORKS (SAYS IF BALL IS HITTING LINE)
-                    self.stop = 0
+                    return 0
                 elif(self.r+2<=self.pointToLine(lines[n])):
-                    self.stop = 1
+                    return line[n]
+            return None
+                
+    def bounce(self, line):
+        #[[x1, y1],[x2, y2]]
+        #apparently 2*(angle ball - angle line) rotate clockwise works well for now on + slope line :D doesn't give direction?
+        #counterclockwise for negative slope so: 180-2*(angle ball - angle line) rotation ????
+        if(line!=None):
+            x=1
+            #self.dx=something reversed
+            #self.dy=something reversed
         
-        
-        
-            
-
-
 class Planet(pygame.sprite.Sprite):
     def __init__(self, x, y, r, rotation, line_length, speed, accel):
         pygame.sprite.Sprite.__init__(self)
@@ -185,16 +180,14 @@ class Planet(pygame.sprite.Sprite):
         self.incrementAngle(self.speed)
     def givespeed(self, obj):       #modify for speed transfer
         if(mag(obj.x, obj.y)<=self.r+obj.r+0.01):
-            obj.normx = -1*obj.y/mag(obj.x, obj.y)*self.speed/2
-            obj.normy = obj.x/mag(obj.x, obj.y)*self.speed/2
+            obj.normx = -1*obj.y/mag(obj.x, obj.y)*self.speed/20
+            obj.normy = obj.x/mag(obj.x, obj.y)*self.speed/20
         else:
             obj.normx=0
             obj.normy=0
     def incrementAngle(self, angle):
         self.rotangle+=angle
-    def applygrav(self, obj):                           #junk
-        obj.dx -=  0.2/(obj.x/abs(obj.x))
-        obj.dy -=  0.2/(obj.y/abs(obj.y))
+
         
 #---Initialize objects---#
 planet_radius = 140
