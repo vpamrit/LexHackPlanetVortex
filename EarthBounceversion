@@ -1,0 +1,241 @@
+import pygame
+from pygame.locals import *
+import sys
+import time
+import math
+import pyganim
+
+pygame.init()
+#---------------CHANGELOG--------------------#
+#removed apply gravity
+#removed self.stop function/usage
+#removed stuff from move CAREFUL
+#--------Variable Declarations--------------#
+
+MAX_X = 800
+MAX_Y = 640
+  
+# set up the colors
+BLACK = (  0,   0,   0)
+WHITE = (255, 255, 255)
+RED   = (255,   0,   0)
+GREEN = (  0, 255,   0)
+BLUE  = (  0,   0, 255)
+mainClock = pygame.time.Clock()
+BGCOLOR = (100, 50, 50)
+
+Surface = pygame.display.set_mode((MAX_X, MAX_Y))
+pygame.display.set_caption('Planet Vortex')
+line_coords = [ [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] ]
+#-------------------------------------------#
+
+
+#---------Helper Functions -----------------#
+def DegtoRad(angle):
+    return angle/180.0*math.pi
+def ConvertCoord(x,y):
+    return [x+400, -1*y +320]
+def rot_center(image, angle):
+    """rotate an image while keeping its center and size"""
+    orig_rect = image.get_rect()
+    rot_image = pygame.transform.rotate(image, angle)
+    rot_rect = orig_rect.copy()
+    rot_rect.center = rot_image.get_rect().center
+    rot_image = rot_image.subsurface(rot_rect).copy()
+    return rot_image
+def mag(x,y):
+    return math.sqrt(x*x+y*y)
+def dist(p1, p2):
+    return math.sqrt( (p2[1]-p1[1])**2 + (p2[0]-p1[0])**2)
+def findSlope(line):
+    if((line[0][0]-line[1][0]) == 0):
+        return 1000.0
+    slope =  float(line[0][1]-line[1][1])/(line[0][0]-line[1][0])
+    return slope
+#-------------------------------------------#
+class Ball(pygame.sprite.Sprite):
+    def __init__(self, x, y, dx, dy, r, angle):
+        pygame.sprite.Sprite.__init__(self)
+        self.gaccel=10 #gravitational acceleration constant
+        self.dx= 0
+        self.dy= 0
+        self.normx=0
+        self.normy=0
+        self.gravx=0
+        self.gravy=0
+        self.x = x
+        self.y = y
+        self.r = r
+        self.angle = angle
+        self.speed =0
+        self.gspeed=0
+        self.draw_width = 4
+        self.stop = 1
+    def draw(self):#WORKING
+        pygame.draw.circle(Surface, BLACK, ConvertCoord((int)(self.x),(int)(self.y)), self.r, self.draw_width)
+    def boundary(self, earth_radius):#WORKING
+        cur_r = mag(self.x,self.y)
+        if( cur_r< earth_radius+self.r):
+            self.x = self.x/cur_r *(self.r+earth_radius)
+            self.y = self.y/cur_r *(self.r+earth_radius)
+        self.normy = self.x/mag(self.x, self.y)*self.speed
+    def grav(self, earth_radius):
+        magnit = mag(self.x, self.y)
+        self.gaccel=0.005
+        if(self.r+earth_radius+0.01>=mag(self.x, self.y)):
+           self.gaccel=0.0
+        self.gravx= -1*self.x/magnit*self.gaccel
+        self.gravy= -1*self.y/magnit*self.gaccel
+    def move(self, earthobj, lines):
+        self.grav(earthobj.r)       #modify for gravitational strength
+       # self.between(lines)
+        self.dx+=self.gravx + self.normx   #break into two components, normal speed and gravity speed
+        self.dy+=self.gravy + self.normy
+        if(mag(self.dx, self.dy)>2): #CAPPING STATEMENT ON SPEED OF THE BALL
+            self.dx=self.dx/mag(self.dx, self.dy)*2
+            self.dy=self.dy/mag(self.dx, self.dy)*2
+        self.dx=self.dx/1.001 #friction
+        self.dy=self.dy/1.001
+        if(mag(self.x, self.y)<=earthobj.r+self.r):                #WHAT VECTOR PROJECTION???????????
+            self.earthbounce()
+        self.x+=self.dx #add velocity to dx and dy
+        self.y+=self.dy
+    def gravector(self, earth_radius): #completely UNTESTED RAW
+        scale = 1.0
+        scalar = (self.x*self.dx + self.y*self.dy)/mag(self.x, self.y)
+        graverx = self.x/mag(self.x, self.y) *scalar
+        gravery = self.y/mag(self.x, self.y) *scalar
+        if(mag(self.x, self.y)<= self.r+earth_radius):
+            if(mag(graverx, gravery)>2):
+                scale = 2.0
+            self.dx-=scale*graverx
+            self.dy-=scale*gravery
+                
+    def pointToLine(self,line):#[[400,500],[580,420]] WORKING
+        mline = findSlope(line)#slope of the barrier line
+        if(self.dx ==0):
+            if(self.dy<0):
+                mball = -1000
+            elif(self.dy>0):
+                mball = 1000
+            elif(self.dy==0):
+                mball = 0
+        else:  
+            mball = self.dy/self.dx
+        if(mline==0):
+            distance = abs(line[0][1] - self.y)
+        else:
+            x = (mball*(self.x) - self.y + line[1][1] - mline*line[1][0])/(mball-mline)
+            y = mline*x+(line[1][1] - mline*line[1][0])
+            distance = dist([self.x,self.y],[x,y])
+        return distance    
+    def between(self, lines):                                                           #returns the line that the ball is touching
+        for n in range(len(lines)):
+            #[ [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] , [[0,0],[0,0]] ]
+            center = [  (lines[n][0][0] +lines[n][1][0])/2 , (lines[n][0][1] + lines[n][1][1])/2  ]
+            if( dist(center, [self.x,self.y]) < 2*self.r ):
+                if(self.r>=self.pointToLine(lines[n])):#THIS WORKS (SAYS IF BALL IS HITTING LINE)
+                    return 0
+                elif(self.r+2<=self.pointToLine(lines[n])):
+                    return line[n]
+            return None
+    def earthbounce(self):
+        #vector to be projected on is (x, y) of ball
+        #use the scalar (u dot v)/mag(v^2) * v
+        magv=mag(self.x,self.y)
+        scalar = ((self.dx*self.x+self.dy*self.y)/(magv*magv)) #unsure about negatives
+        projx = scalar * self.x
+        projy = scalar*self.y
+        if(mag(projx, projy)>0.5):
+            self.dx-=projx + projx/1.1
+            self.dy-=projy + projy/1.1
+    def bounce(self, line):
+        #[[x1, y1],[x2, y2]]
+        #apparently 2*(angle ball - angle line) rotate clockwise works well for now on + slope line :D doesn't give direction?
+        #counterclockwise for negative slope so: 180-2*(angle ball - angle line) rotation ????
+        if(line!=None):
+            x=1
+            #self.dx=something reversed
+            #self.dy=something reversed
+        
+class Planet(pygame.sprite.Sprite):
+    def __init__(self, x, y, r, rotation, line_length, speed, accel):
+        pygame.sprite.Sprite.__init__(self)
+        self.x = x
+        self.y = y
+        self.r = r
+        self.rotangle = rotation
+        self.line_length = line_length
+        self.draw_width = 10
+        self.speed = speed
+        self.accel = accel
+    def draw(self):#WORKS
+        pygame.draw.circle(Surface, BLACK, ConvertCoord(self.x,self.y), self.r, self.draw_width)
+    def lines(self, num_lines):#WORKS
+        total_degrees = 360.0
+        section_degrees = total_degrees/num_lines
+        for n in range(num_lines):
+            line_coords[n][0][0]= self.r * math.cos( DegtoRad(self.rotangle + n*section_degrees) )
+            line_coords[n][0][1] = self.r * math.sin( DegtoRad(self.rotangle + n*section_degrees) )
+            line_coords[n][1][0] = (self.r+self.line_length) * math.cos( DegtoRad(self.rotangle + n*section_degrees) )
+            line_coords[n][1][1] = (self.r+self.line_length) * math.sin( DegtoRad(self.rotangle + n*section_degrees) )
+            self.draw_lines(ConvertCoord(line_coords[n][0][0],line_coords[n][0][1]),ConvertCoord(line_coords[n][1][0],line_coords[n][1][1]))
+            
+    def draw_lines(self, p1, p2):#WORKS
+        pygame.draw.line(Surface, BLACK, p1, p2, self.draw_width)
+    def rotation(self, slow_constant):
+        value=0
+        key=pygame.key.get_pressed()
+        if(key[K_SPACE]):
+            ball1.x = pygame.mouse.get_pos()[0]-400
+            ball1.y = -1*(pygame.mouse.get_pos()[1]-320)  
+        if(abs(self.accel)<0.05):
+            if(key[K_RIGHT]):
+                value-=0.005
+            elif(key[K_LEFT]):
+                value+=0.005
+        self.speed = self.speed/slow_constant
+        if(self.speed>-0.5) and (self.speed<0.5):
+            self.speed+=value
+        self.incrementAngle(self.speed)
+    def givespeed(self, obj):       #modify for speed transfer
+        if(mag(obj.x, obj.y)<=self.r+obj.r+0.01):
+            obj.normx = -1*obj.y/mag(obj.x, obj.y)*self.speed/20
+            obj.normy = obj.x/mag(obj.x, obj.y)*self.speed/20
+        else:
+            obj.normx=0
+            obj.normy=0
+    def incrementAngle(self, angle):
+        self.rotangle+=angle
+
+        
+#---Initialize objects---#
+planet_radius = 140
+ball_radius = 20
+earth = Planet(0,0, planet_radius,0, 55, 0,0)
+ball1 = Ball(planet_radius + ball_radius, 0, 0, 0, ball_radius, 0)
+
+while True:
+    Surface.fill(BGCOLOR)
+    for event in pygame.event.get():
+        if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
+            pygame.quit()
+            sys.exit()
+#--drawings--#
+    #print ball1.x , " ", ball1.y
+    earth.lines(5)
+    earth.draw()
+    ball1.draw()
+#------------#
+    
+
+#----Calculations---#
+    earth.rotation(1.012)
+    #ball1.x = pygame.mouse.get_pos()[0]-400
+    #ball1.y = -1*(pygame.mouse.get_pos()[1]-320)
+    earth.givespeed(ball1)
+    ball1.move(earth, line_coords)
+    ball1.boundary(earth.r)
+    #ball1.between(line_coords)
+    pygame.display.update()
+
